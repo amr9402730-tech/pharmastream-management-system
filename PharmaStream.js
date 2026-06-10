@@ -2,7 +2,7 @@ let currentUser = null;
 let cart = [];
 let cartTotal = 0;
 let allInvoicesCache = []; // كاش محلي للفواتير لفلترتها ديناميكياً بدون استعلامات معقدة
-const API_BASE = 'http://localhost:3000/api';
+const API_BASE = 'https://pharmastream-management-system-production.up.railway.app/api';
 
 // ==========================================
 // 1. نظام تسجيل الدخول والتحقق
