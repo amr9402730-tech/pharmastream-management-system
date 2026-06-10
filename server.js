@@ -175,6 +175,122 @@ app.post('/api/invoices', async (req, res) => {
   }
 });
 
+// 4. Initialize Database & Create Default Users
+async function initDB() {
+  try {
+    // Create tables if not exist
+    await db.query(`CREATE TABLE IF NOT EXISTS Roles (
+      roleid INT AUTO_INCREMENT PRIMARY KEY,
+      rolename VARCHAR(50) NOT NULL UNIQUE,
+      description VARCHAR(255)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Users (
+      userid INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) NOT NULL UNIQUE,
+      password VARCHAR(255) NOT NULL,
+      fullname VARCHAR(100) NOT NULL,
+      roleid INT NOT NULL,
+      createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (roleid) REFERENCES Roles(roleid)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Permissions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      roleid INT NOT NULL,
+      action VARCHAR(100) NOT NULL,
+      isallowed TINYINT(1) DEFAULT 1,
+      UNIQUE KEY roleid_action (roleid, action),
+      FOREIGN KEY (roleid) REFERENCES Roles(roleid) ON DELETE CASCADE
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Customers (
+      customerid INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100),
+      contactnumber VARCHAR(20)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Suppliers (
+      supplierid INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      contactnumber VARCHAR(20)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Medicines (
+      medicineid INT AUTO_INCREMENT PRIMARY KEY,
+      code VARCHAR(50) NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      category VARCHAR(50),
+      price DECIMAL(10,2) NOT NULL,
+      qty INT DEFAULT 0,
+      minqty INT DEFAULT 10,
+      expirydate DATE NOT NULL,
+      supplierid INT,
+      FOREIGN KEY (supplierid) REFERENCES Suppliers(supplierid)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Invoices (
+      invoiceid INT AUTO_INCREMENT PRIMARY KEY,
+      invoicenumber VARCHAR(50) NOT NULL UNIQUE,
+      createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      totalprice DECIMAL(10,2) NOT NULL,
+      cashierid INT,
+      customerid INT,
+      FOREIGN KEY (cashierid) REFERENCES Users(userid),
+      FOREIGN KEY (customerid) REFERENCES Customers(customerid)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS InvoiceItems (
+      itemid INT AUTO_INCREMENT PRIMARY KEY,
+      invoiceid INT,
+      medicineid INT,
+      quantity INT NOT NULL,
+      unitprice DECIMAL(10,2) NOT NULL,
+      FOREIGN KEY (invoiceid) REFERENCES Invoices(invoiceid) ON DELETE CASCADE,
+      FOREIGN KEY (medicineid) REFERENCES Medicines(medicineid)
+    )`);
+
+    await db.query(`CREATE TABLE IF NOT EXISTS Payments (
+      transactionid INT AUTO_INCREMENT PRIMARY KEY,
+      invoiceid INT,
+      amount DECIMAL(10,2) NOT NULL,
+      method VARCHAR(20),
+      status VARCHAR(20) DEFAULT 'Completed',
+      FOREIGN KEY (invoiceid) REFERENCES Invoices(invoiceid)
+    )`);
+
+    // Insert default roles
+    await db.query(`INSERT IGNORE INTO Roles (roleid, rolename, description) VALUES
+      (1, 'admin', 'System Administrator'),
+      (2, 'cashier', 'Sales Cashier'),
+      (3, 'pharmacist', 'Head Pharmacist')`);
+
+    // Insert default permissions
+    await db.query(`INSERT IGNORE INTO Permissions (roleid, action) VALUES
+      (1,'createuser'),(1,'viewusers'),(1,'updateuser'),(1,'deleteuser'),
+      (1,'manageroles'),(1,'viewinventory'),(1,'addmedicine'),(1,'updatestock'),
+      (1,'deletemedicine'),(1,'viewreports'),(1,'viewallinvoices'),(1,'refundinvoice'),
+      (2,'issueinvoice'),(2,'viewowninvoices'),(2,'viewinventory'),(2,'viewpendingprescriptions'),
+      (3,'createprescription'),(3,'cancelprescription'),(3,'viewownprescriptions'),(3,'viewinventory')`);
+
+    // Insert default admin user
+    await db.query(`INSERT IGNORE INTO Users (userid, username, password, fullname, roleid) VALUES
+      (1, 'admin', '123456', 'System Admin', 1)`);
+
+    console.log('Database initialized with default data!');
+  } catch (err) {
+    console.error('DB Init Error:', err);
+  }
+}
+
+
 // 4. Server Start
+
+
+// 5. Start Server & Init DB
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`Server is running on port ${PORT}`);
+  await initDB();
+});
