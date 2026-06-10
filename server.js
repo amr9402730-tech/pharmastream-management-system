@@ -18,279 +18,334 @@ const dbConfig = {
 const db = mysql.createPool(dbConfig);
 console.log('Connected to Pharmacy Database - MySQL Pool created');
 
-// 2. RBAC Middleware
-const checkPermission = (requestedAction) => {
+// 2. Database Initialization Function
+async function initDB() {
+  try {
+    // Create roles table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS roles (
+        role_id INT AUTO_INCREMENT PRIMARY KEY,
+        role_name VARCHAR(50) UNIQUE NOT NULL,
+        description TEXT
+      )
+    `);
+
+    // Create users table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        user_id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        full_name VARCHAR(100),
+        email VARCHAR(100),
+        role_id INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (role_id) REFERENCES roles(role_id)
+      )
+    `);
+
+    // Create medicines table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS medicines (
+        medicine_id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        category VARCHAR(50),
+        price DECIMAL(10,2),
+        stock_quantity INT DEFAULT 0,
+        expiry_date DATE,
+        supplier VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create permissions table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS permissions (
+        permission_id INT AUTO_INCREMENT PRIMARY KEY,
+        permission_name VARCHAR(50) UNIQUE NOT NULL,
+        description TEXT
+      )
+    `);
+
+    // Create role_permissions table
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        role_id INT,
+        permission_id INT,
+        PRIMARY KEY (role_id, permission_id),
+        FOREIGN KEY (role_id) REFERENCES roles(role_id),
+        FOREIGN KEY (permission_id) REFERENCES permissions(permission_id)
+      )
+    `);
+
+    // Insert default roles
+    await db.query(`
+      INSERT IGNORE INTO roles (role_name, description) VALUES
+      ('Admin', 'Full system access'),
+      ('Pharmacist', 'Manage medicines and prescriptions'),
+      ('Cashier', 'Process sales and transactions')
+    `);
+
+    // Insert default permissions
+    await db.query(`
+      INSERT IGNORE INTO permissions (permission_name, description) VALUES
+      ('manage_users', 'Create, edit, delete users'),
+      ('manage_medicines', 'Add, edit, delete medicines'),
+      ('view_medicines', 'View medicine inventory'),
+      ('process_sales', 'Process sales transactions'),
+      ('view_reports', 'View system reports')
+    `);
+
+    // Get role IDs
+    const [roles] = await db.query('SELECT role_id, role_name FROM roles');
+    const adminRoleId = roles.find(r => r.role_name === 'Admin')?.role_id;
+    const pharmacistRoleId = roles.find(r => r.role_name === 'Pharmacist')?.role_id;
+    const cashierRoleId = roles.find(r => r.role_name === 'Cashier')?.role_id;
+
+    // Get permission IDs
+    const [permissions] = await db.query('SELECT permission_id, permission_name FROM permissions');
+    const permMap = {};
+    permissions.forEach(p => permMap[p.permission_name] = p.permission_id);
+
+    // Assign permissions to roles
+    await db.query(`
+      INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES
+      (${adminRoleId}, ${permMap['manage_users']}),
+      (${adminRoleId}, ${permMap['manage_medicines']}),
+      (${adminRoleId}, ${permMap['view_medicines']}),
+      (${adminRoleId}, ${permMap['process_sales']}),
+      (${adminRoleId}, ${permMap['view_reports']}),
+      (${pharmacistRoleId}, ${permMap['manage_medicines']}),
+      (${pharmacistRoleId}, ${permMap['view_medicines']}),
+      (${pharmacistRoleId}, ${permMap['view_reports']}),
+      (${cashierRoleId}, ${permMap['view_medicines']}),
+      (${cashierRoleId}, ${permMap['process_sales']})
+    `);
+
+    // Insert default users
+    await db.query(`
+      INSERT IGNORE INTO users (username, password, full_name, email, role_id) VALUES
+      ('admin', '123456', 'System Administrator', 'admin@pharmastream.com', ${adminRoleId}),
+      ('pharmacist', '123456', 'John Pharmacist', 'pharmacist@pharmastream.com', ${pharmacistRoleId}),
+      ('cashier', '123456', 'Jane Cashier', 'cashier@pharmastream.com', ${cashierRoleId})
+    `);
+
+    // Insert default medicines
+    await db.query(`
+      INSERT IGNORE INTO medicines (name, category, price, stock_quantity, expiry_date, supplier) VALUES
+      ('Paracetamol 500mg', 'Pain Relief', 5.00, 500, '2027-12-31', 'PharmaCorp'),
+      ('Ibuprofen 400mg', 'Pain Relief', 8.50, 300, '2027-10-15', 'MediSupply'),
+      ('Amoxicillin 250mg', 'Antibiotic', 15.00, 200, '2027-08-20', 'PharmaCorp'),
+      ('Aspirin 100mg', 'Cardiovascular', 4.00, 400, '2028-01-10', 'HealthPlus'),
+      ('Omeprazole 20mg', 'Gastrointestinal', 12.00, 150, '2027-11-30', 'MediSupply'),
+      ('Metformin 500mg', 'Diabetes', 10.00, 250, '2027-09-25', 'PharmaCorp'),
+      ('Cetirizine 10mg', 'Antihistamine', 6.50, 350, '2027-12-15', 'HealthPlus'),
+      ('Cough Syrup', 'Respiratory', 9.00, 180, '2027-07-30', 'MediSupply'),
+      ('Vitamin D3 1000IU', 'Supplement', 18.00, 220, '2028-03-20', 'HealthPlus'),
+      ('Insulin Glargine', 'Diabetes', 85.00, 50, '2027-06-15', 'PharmaCorp')
+    `);
+
+    console.log('✅ Database initialized successfully with default data');
+  } catch (error) {
+    console.error('❌ Error initializing database:', error);
+  }
+}
+
+// Initialize database on startup
+initDB();
+
+// 3. Helper function for DB queries
+const query = async (sql, params) => {
+  return await db.query(sql, params);
+};
+
+// Middleware to check permissions
+const checkPermission = (requiredPermission) => {
   return async (req, res, next) => {
-    const roleId = req.headers['x-user-role-id'];
-    if (!roleId) return res.status(401).json({ success: false, message: 'Unauthorized: Missing Role ID' });
     try {
-      const [rows] = await db.query(
-        'SELECT isallowed FROM Permissions WHERE roleid = ? AND action = ?',
-        [roleId, requestedAction]
-      );
-      if (rows.length > 0 && rows[0].isallowed === 1) {
-        next();
-      } else {
-        res.status(403).json({ success: false, message: 'Access Denied!' });
+      const userId = req.body.user_id || req.query.user_id;
+      if (!userId) return res.status(403).json({ error: 'User ID required' });
+
+      const [results] = await query(`
+        SELECT p.permission_name 
+        FROM users u
+        JOIN roles r ON u.role_id = r.role_id
+        JOIN role_permissions rp ON r.role_id = rp.role_id
+        JOIN permissions p ON rp.permission_id = p.permission_id
+        WHERE u.user_id = ?
+      `, [userId]);
+
+      const hasPermission = results.some(row => row.permission_name === requiredPermission);
+      if (!hasPermission) {
+        return res.status(403).json({ error: 'Permission denied' });
       }
+      next();
     } catch (error) {
-      console.error('DB Permission Error:', error);
-      res.status(500).json({ success: false, message: 'System Error' });
+      res.status(500).json({ error: error.message });
     }
   };
 };
 
-// 3. API Routes
+// ========== API ENDPOINTS ==========
 
-// Login
+// Login endpoint
 app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
   try {
-    const query = `SELECT u.userid, u.username, u.fullname, u.roleid, r.rolename
-                   FROM Users u
-                   JOIN Roles r ON u.roleid = r.roleid
-                   WHERE u.username = ? AND u.password = ?`;
-    const [users] = await db.query(query, [username, password]);
+    const { username, password } = req.body;
+    const [users] = await query(
+      'SELECT u.*, r.role_name FROM users u JOIN roles r ON u.role_id = r.role_id WHERE username = ? AND password = ?',
+      [username, password]
+    );
+
     if (users.length > 0) {
-      res.json({ success: true, user: users[0] });
+      const user = users[0];
+      // Get user permissions
+      const [permissions] = await query(`
+        SELECT p.permission_name
+        FROM role_permissions rp
+        JOIN permissions p ON rp.permission_id = p.permission_id
+        WHERE rp.role_id = ?
+      `, [user.role_id]);
+
+      res.json({
+        success: true,
+        user: {
+          user_id: user.user_id,
+          username: user.username,
+          full_name: user.full_name,
+          role: user.role_name,
+          permissions: permissions.map(p => p.permission_name)
+        }
+      });
     } else {
       res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Get Roles
-app.get('/api/roles', async (req, res) => {
-  try {
-    const [roles] = await db.query('SELECT roleid, rolename, description FROM Roles');
-    res.json({ success: true, roles });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Create User
-app.post('/api/users', checkPermission('createuser'), async (req, res) => {
-  const { username, password, fullname, roleid } = req.body;
-  try {
-    await db.query(
-      'INSERT INTO Users (username, password, fullname, roleid) VALUES (?, ?, ?, ?)',
-      [username, password, fullname, roleid]
-    );
-    res.json({ success: true, message: 'User created successfully!' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Error creating user' });
-  }
-});
-
-// Get Users
-app.get('/api/users', async (req, res) => {
-  try {
-    const [users] = await db.query(
-      'SELECT u.userid, u.username, u.fullname, r.rolename FROM Users u JOIN Roles r ON u.roleid = r.roleid'
-    );
-    res.json({ success: true, users });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
-// Get Medicines
+// Get all medicines
 app.get('/api/medicines', async (req, res) => {
   try {
-    const [medicines] = await db.query('SELECT * FROM Medicines');
-    res.json({ success: true, medicines });
+    const [medicines] = await query('SELECT * FROM medicines ORDER BY name');
+    res.json(medicines);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Add/Update Medicine
-app.post('/api/medicines', checkPermission('addmedicine'), async (req, res) => {
-  const { code, name, price, qty } = req.body;
+// Get medicine by ID
+app.get('/api/medicines/:id', async (req, res) => {
   try {
-    const [existing] = await db.query('SELECT medicineid FROM Medicines WHERE code = ?', [code]);
-    if (existing.length > 0) {
-      await db.query('UPDATE Medicines SET name = ?, price = ?, qty = ? WHERE code = ?', [name, price, qty, code]);
-      res.json({ success: true, message: 'Medicine updated successfully!' });
+    const [medicines] = await query('SELECT * FROM medicines WHERE medicine_id = ?', [req.params.id]);
+    if (medicines.length > 0) {
+      res.json(medicines[0]);
     } else {
-      await db.query(
-        'INSERT INTO Medicines (code, name, price, qty, expirydate) VALUES (?, ?, ?, ?, ?)',
-        [code, name, price, qty, '2027-01-01']
-      );
-      res.json({ success: true, message: 'Medicine added successfully!' });
+      res.status(404).json({ error: 'Medicine not found' });
     }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: 'Error saving medicine' });
-  }
-});
-
-// Get Reports
-app.get('/api/reports', async (req, res) => {
-  try {
-    const [invoices] = await db.query('SELECT * FROM Invoices ORDER BY createdat DESC');
-    res.json({ success: true, invoices });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// Process Invoice
-app.post('/api/invoices', async (req, res) => {
-  const { items, total, cashierid } = req.body;
-  const invoiceNumber = 'INV-' + Date.now();
+// Add new medicine
+app.post('/api/medicines', async (req, res) => {
   try {
-    const [result] = await db.query(
-      'INSERT INTO Invoices (invoicenumber, totalprice, cashierid) VALUES (?, ?, ?)',
-      [invoiceNumber, total, cashierid]
+    const { name, category, price, stock_quantity, expiry_date, supplier } = req.body;
+    const [result] = await query(
+      'INSERT INTO medicines (name, category, price, stock_quantity, expiry_date, supplier) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, category, price, stock_quantity, expiry_date, supplier]
     );
-    const invoiceId = result.insertId;
-    for (const item of items) {
-      const [med] = await db.query('SELECT medicineid FROM Medicines WHERE code = ?', [item.code]);
-      if (med.length > 0) {
-        await db.query(
-          'INSERT INTO InvoiceItems (invoiceid, medicineid, quantity, unitprice) VALUES (?, ?, ?, ?)',
-          [invoiceId, med[0].medicineid, item.qty, item.price]
-        );
-        await db.query('UPDATE Medicines SET qty = qty - ? WHERE code = ?', [item.qty, item.code]);
-      }
-    }
-    await db.query(
-      'INSERT INTO Payments (invoiceid, amount, method, status) VALUES (?, ?, ?, ?)',
-      [invoiceId, total, 'cash', 'Completed']
-    );
-    res.json({ success: true, message: 'Invoice created: ' + invoiceNumber });
+    res.json({ success: true, medicine_id: result.insertId });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Error processing payment' });
+    res.status(500).json({ error: error.message });
   }
 });
 
-// 4. Initialize Database & Create Default Users
-async function initDB() {
+// Update medicine
+app.put('/api/medicines/:id', async (req, res) => {
   try {
-    // Create tables if not exist
-    await db.query(`CREATE TABLE IF NOT EXISTS Roles (
-      roleid INT AUTO_INCREMENT PRIMARY KEY,
-      rolename VARCHAR(50) NOT NULL UNIQUE,
-      description VARCHAR(255)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Users (
-      userid INT AUTO_INCREMENT PRIMARY KEY,
-      username VARCHAR(50) NOT NULL UNIQUE,
-      password VARCHAR(255) NOT NULL,
-      fullname VARCHAR(100) NOT NULL,
-      roleid INT NOT NULL,
-      createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (roleid) REFERENCES Roles(roleid)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Permissions (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      roleid INT NOT NULL,
-      action VARCHAR(100) NOT NULL,
-      isallowed TINYINT(1) DEFAULT 1,
-      UNIQUE KEY roleid_action (roleid, action),
-      FOREIGN KEY (roleid) REFERENCES Roles(roleid) ON DELETE CASCADE
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Customers (
-      customerid INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(100),
-      contactnumber VARCHAR(20)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Suppliers (
-      supplierid INT AUTO_INCREMENT PRIMARY KEY,
-      name VARCHAR(100) NOT NULL,
-      contactnumber VARCHAR(20)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Medicines (
-      medicineid INT AUTO_INCREMENT PRIMARY KEY,
-      code VARCHAR(50) NOT NULL UNIQUE,
-      name VARCHAR(100) NOT NULL,
-      description TEXT,
-      category VARCHAR(50),
-      price DECIMAL(10,2) NOT NULL,
-      qty INT DEFAULT 0,
-      minqty INT DEFAULT 10,
-      expirydate DATE NOT NULL,
-      supplierid INT,
-      FOREIGN KEY (supplierid) REFERENCES Suppliers(supplierid)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Invoices (
-      invoiceid INT AUTO_INCREMENT PRIMARY KEY,
-      invoicenumber VARCHAR(50) NOT NULL UNIQUE,
-      createdat TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      totalprice DECIMAL(10,2) NOT NULL,
-      cashierid INT,
-      customerid INT,
-      FOREIGN KEY (cashierid) REFERENCES Users(userid),
-      FOREIGN KEY (customerid) REFERENCES Customers(customerid)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS InvoiceItems (
-      itemid INT AUTO_INCREMENT PRIMARY KEY,
-      invoiceid INT,
-      medicineid INT,
-      quantity INT NOT NULL,
-      unitprice DECIMAL(10,2) NOT NULL,
-      FOREIGN KEY (invoiceid) REFERENCES Invoices(invoiceid) ON DELETE CASCADE,
-      FOREIGN KEY (medicineid) REFERENCES Medicines(medicineid)
-    )`);
-
-    await db.query(`CREATE TABLE IF NOT EXISTS Payments (
-      transactionid INT AUTO_INCREMENT PRIMARY KEY,
-      invoiceid INT,
-      amount DECIMAL(10,2) NOT NULL,
-      method VARCHAR(20),
-      status VARCHAR(20) DEFAULT 'Completed',
-      FOREIGN KEY (invoiceid) REFERENCES Invoices(invoiceid)
-    )`);
-
-    // Insert default roles
-    await db.query(`INSERT IGNORE INTO Roles (roleid, rolename, description) VALUES
-      (1, 'admin', 'System Administrator'),
-      (2, 'cashier', 'Sales Cashier'),
-      (3, 'pharmacist', 'Head Pharmacist')`);
-
-    // Insert default permissions
-    await db.query(`INSERT IGNORE INTO Permissions (roleid, action) VALUES
-      (1,'createuser'),(1,'viewusers'),(1,'updateuser'),(1,'deleteuser'),
-      (1,'manageroles'),(1,'viewinventory'),(1,'addmedicine'),(1,'updatestock'),
-      (1,'deletemedicine'),(1,'viewreports'),(1,'viewallinvoices'),(1,'refundinvoice'),
-      (2,'issueinvoice'),(2,'viewowninvoices'),(2,'viewinventory'),(2,'viewpendingprescriptions'),
-      (3,'createprescription'),(3,'cancelprescription'),(3,'viewownprescriptions'),(3,'viewinventory')`);
-
-    // Insert default admin user
-    await db.query(`INSERT IGNORE INTO Users (userid, username, password, fullname, roleid) VALUES
-      (1, 'admin', '123456', 'System Admin', 1)`);
-
-    console.log('Database initialized with default data!');
-  } catch (err) {
-    console.error('DB Init Error:', err);
+    const { name, category, price, stock_quantity, expiry_date, supplier } = req.body;
+    await query(
+      'UPDATE medicines SET name=?, category=?, price=?, stock_quantity=?, expiry_date=?, supplier=? WHERE medicine_id=?',
+      [name, category, price, stock_quantity, expiry_date, supplier, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-}
+});
 
+// Delete medicine
+app.delete('/api/medicines/:id', async (req, res) => {
+  try {
+    await query('DELETE FROM medicines WHERE medicine_id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// 4. Server Start
+// Get all users
+app.get('/api/users', async (req, res) => {
+  try {
+    const [users] = await query(
+      'SELECT u.user_id, u.username, u.full_name, u.email, r.role_name FROM users u JOIN roles r ON u.role_id = r.role_id'
+    );
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
+// Get all roles
+app.get('/api/roles', async (req, res) => {
+  try {
+    const [roles] = await query('SELECT * FROM roles');
+    res.json(roles);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-// 5. Start Server & Init DB
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log(`Server is running on port ${PORT}`);
-  await initDB();
+// Get user permissions
+app.get('/api/users/:id/permissions', async (req, res) => {
+  try {
+    const [permissions] = await query(`
+      SELECT p.permission_name, p.description
+      FROM users u
+      JOIN role_permissions rp ON u.role_id = rp.role_id
+      JOIN permissions p ON rp.permission_id = p.permission_id
+      WHERE u.user_id = ?
+    `, [req.params.id]);
+    res.json(permissions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Search medicines
+app.get('/api/medicines/search/:query', async (req, res) => {
+  try {
+    const searchQuery = `%${req.params.query}%`;
+    const [medicines] = await query(
+      'SELECT * FROM medicines WHERE name LIKE ? OR category LIKE ? ORDER BY name',
+      [searchQuery, searchQuery]
+    );
+    res.json(medicines);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'PharmaStream API is running' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3306;
+app.listen(PORT, () => {
+  console.log(`🚀 PharmaStream API Server running on port ${PORT}`);
 });
