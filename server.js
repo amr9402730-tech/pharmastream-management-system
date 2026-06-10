@@ -8,10 +8,11 @@ app.use(express.json());
 
 // 1. Database Connection
 const dbConfig = {
-  host: 'localhost',
-  user: 'root',
-  password: '123456',
-  database: 'pharmacydb'
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '123456',
+  database: process.env.DB_NAME || 'pharmacydb',
+  port: process.env.DB_PORT || 3306
 };
 
 const db = mysql.createPool(dbConfig);
