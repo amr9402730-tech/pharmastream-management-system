@@ -1,0 +1,385 @@
+/* ==============================================================================
+   🎨 ملف التصميم الأساسي (style.css) - نظام PharmaStream لإدارة الصيدلية
+   ============================================================================== */
+
+:root {
+    --primary: #2c3e50;
+    --secondary: #3498db;
+    --success: #27ae60;
+    --danger: #e74c3c;
+    --light: #ecf0f1;
+    --gray: #95a5a6;
+}
+
+body { 
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    margin: 0; 
+    background-color: #f4f7f6; 
+    color: var(--primary); 
+    direction: ltr; 
+}
+
+/* شاشة تسجيل الدخول */
+.login-screen {
+    position: fixed; 
+    inset: 0;
+    background: linear-gradient(135deg, var(--primary), #1a252f);
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 1000;
+}
+
+.login-card {
+    background: white; 
+    padding: 3rem; 
+    border-radius: 12px; 
+    width: 350px;
+    text-align: center; 
+    box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+}
+
+.login-card h2 {
+    margin: 0 0 5px 0;
+    font-size: 1.6rem;
+}
+
+.login-card p {
+    color: var(--gray);
+    font-size: 0.9rem;
+    margin-bottom: 25px;
+}
+
+.error-text { 
+    color: var(--danger); 
+    font-size: 0.85rem; 
+    display: none; 
+    margin-top: 15px; 
+    font-weight: bold;
+}
+
+/* شريط التنقل العلوي */
+header {
+    background: var(--primary); 
+    color: white; 
+    padding: 1rem 5%;
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+}
+
+.logo { 
+    font-size: 1.5rem; 
+    font-weight: bold; 
+}
+
+.logo span { 
+    color: var(--secondary); 
+    font-weight: bold; 
+}
+
+nav button {
+    background: rgba(255,255,255,0.1); 
+    border: 1px solid rgba(255,255,255,0.2);
+    color: white; 
+    padding: 8px 15px; 
+    margin-left: 10px; 
+    cursor: pointer; 
+    border-radius: 4px;
+    font-weight: bold;
+    transition: all 0.2s ease;
+}
+
+nav button:hover {
+    background: rgba(255,255,255,0.2);
+}
+
+nav button.active-nav { 
+    background: var(--secondary); 
+    border-color: var(--secondary); 
+}
+
+.logout-btn { 
+    border-color: var(--danger); 
+    color: var(--danger); 
+}
+
+.logout-btn:hover {
+    background: var(--danger);
+    color: white;
+}
+
+/* الأقسام والواجهات البرمجية */
+.module { 
+    display: none; 
+    padding: 2rem 5%; 
+    animation: fadeIn 0.3s ease; 
+}
+
+.module.active { 
+    display: block; 
+}
+
+@keyframes fadeIn { 
+    from { opacity: 0; transform: translateY(10px); } 
+    to { opacity: 1; transform: translateY(0); } 
+}
+
+.module-header {
+    margin-bottom: 30px;
+}
+
+.module-header h2 {
+    margin: 0 0 5px 0;
+    font-size: 1.8rem;
+}
+
+.module-header p {
+    margin: 0;
+    color: var(--gray);
+    font-size: 1rem;
+}
+
+/* شبكة التصميم والبطاقات */
+.grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    gap: 20px; 
+}
+
+.card { 
+    background: white; 
+    padding: 1.5rem; 
+    border-radius: 10px; 
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05); 
+}
+
+.card h3 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    border-bottom: 2px solid var(--light);
+    padding-bottom: 10px;
+    font-size: 1.2rem;
+}
+
+.full-width { 
+    grid-column: 1 / -1; 
+}
+
+/* الجداول */
+.table-container {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    border-radius: 8px;
+}
+
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+}
+
+th, td { 
+    text-align: left; 
+    padding: 12px; 
+    border-bottom: 1px solid #eee; 
+}
+
+th { 
+    background-color: #f8f9fa;
+    color: var(--gray); 
+    font-size: 0.75rem; 
+    text-transform: uppercase; 
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.small-table td { 
+    padding: 8px; 
+    font-size: 0.85rem; 
+}
+
+/* الحالات والتنبيهات */
+.status-pill { 
+    padding: 4px 10px; 
+    border-radius: 20px; 
+    font-size: 0.75rem; 
+    font-weight: bold; 
+}
+
+.status-Active { 
+    background: #e8f5e9; 
+    color: #2e7d32; 
+}
+
+.status-Inactive { 
+    background: #ffebee; 
+    color: #c62828; 
+}
+
+.alert-list { 
+    list-style: none; 
+    padding: 0; 
+    margin: 0; 
+}
+
+.alert-item {
+    background: #fff5f5; 
+    border-left: 4px solid var(--danger);
+    padding: 12px; 
+    margin-bottom: 8px; 
+    border-radius: 4px;
+    font-size: 0.85rem; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+}
+
+.alert-warning {
+    background: #fff9e6; 
+    border-left: 4px solid #f1c40f;
+}
+
+.qty-badge { 
+    background: var(--primary); 
+    color: white; 
+    padding: 2px 6px; 
+    border-radius: 4px; 
+    font-weight: bold; 
+}
+
+/* نماذج وعناصر الإدخال */
+.form-group { 
+    margin-bottom: 15px; 
+    text-align: left; 
+}
+
+label { 
+    display: block; 
+    font-size: 0.8rem; 
+    font-weight: bold; 
+    margin-bottom: 5px; 
+}
+
+input, select { 
+    width: 100%; 
+    padding: 10px; 
+    border: 1px solid #ddd; 
+    border-radius: 5px; 
+    box-sizing: border-box;
+    font-size: 0.9rem;
+}
+
+input:focus, select:focus {
+    border-color: var(--secondary);
+    outline: none;
+}
+
+/* الأزرار والتفاعلات */
+.primary-btn { 
+    background: var(--secondary); 
+    color: white; 
+    border: none; 
+    width: 100%; 
+    padding: 12px; 
+    cursor: pointer; 
+    font-weight: bold; 
+    border-radius: 5px;
+    transition: background 0.2s ease;
+}
+
+.primary-btn:hover {
+    background: #2980b9;
+}
+
+.success-btn { 
+    background: var(--success); 
+    color: white; 
+    border: none; 
+    width: 100%; 
+    padding: 15px; 
+    cursor: pointer; 
+    font-weight: bold; 
+    margin-top: 15px; 
+    border-radius: 5px;
+    font-size: 1rem;
+    transition: background 0.2s ease;
+}
+
+.success-btn:hover {
+    background: #219150;
+}
+
+.toggle-btn { 
+    background: #f0f2f5; 
+    border: 1px solid #ddd; 
+    padding: 8px 12px; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-size: 0.85rem; 
+    font-weight: bold;
+    transition: background 0.2s ease;
+}
+
+.toggle-btn:hover {
+    background: #e4e6eb;
+}
+
+.remove-btn { 
+    background: var(--danger); 
+    color: white; 
+    border: none; 
+    padding: 4px 8px; 
+    border-radius: 4px; 
+    cursor: pointer; 
+    font-weight: bold;
+}
+
+.remove-btn:hover {
+    background: #c0392b;
+}
+
+/* تفاصيل واجهة نقاط البيع (POS) */
+.sales-container { 
+    display: grid; 
+    grid-template-columns: 2fr 1fr; 
+    gap: 20px; 
+}
+
+.search-box { 
+    display: flex; 
+    gap: 10px; 
+    align-items: stretch;
+}
+
+.total-box { 
+    background: #f8f9fa; 
+    padding: 20px; 
+    text-align: center; 
+    border-radius: 8px; 
+    border: 1px solid #eee;
+}
+
+.total-box h4 {
+    margin: 0 0 10px 0;
+    color: var(--gray);
+    text-transform: uppercase;
+    font-size: 0.9rem;
+}
+
+.total-box h1 {
+    margin: 0;
+    font-size: 2.2rem;
+    color: var(--success);
+}
+
+.report-stats p {
+    font-size: 1rem;
+    margin: 10px 0;
+}
+
+.report-stats strong {
+    color: var(--success);
+    font-size: 1.2rem;
+}
