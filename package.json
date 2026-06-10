@@ -1,0 +1,17 @@
+{
+  "name": "pharmastream-management-system",
+  "version": "1.0.0",
+  "description": "Pharmacy Management System with RBAC",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "mysql2": "^3.6.0"
+  },
+  "engines": {
+    "node": ">=14.x"
+  }
+}
