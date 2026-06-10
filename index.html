@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PharmaStream | نظام إدارة الصيدلية الذكية</title>
+    <!-- ربط ملف التصميم الخارجي -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- بوابة تسجيل الدخول (Authentication) -->
+    <div id="loginOverlay" class="login-screen">
+        <div class="login-card">
+            <div class="logo">Pharma<span>Stream</span></div>
+            <h2>System Authentication</h2>
+            <p>Enter credentials to access your workflow.</p>
+            
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="loginUser" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPass" placeholder="••••••••">
+            </div>
+            
+            <button class="primary-btn" onclick="handleLogin()">Login to System</button>
+            <p id="loginError" class="error-text"></p>
+        </div>
+    </div>
+
+    <!-- شريط القائمة العلوي والتنقل بين الواجهات -->
+    <header id="mainHeader" style="display: none;">
+        <div class="logo">Pharma<span>Stream</span></div>
+        <nav id="navLinks">
+            <button id="btn-admin" onclick="showModule('admin')">Admin</button>
+            <button id="btn-pharmacist" onclick="showModule('pharmacist')">Pharmacist</button>
+            <button id="btn-cashier" onclick="showModule('cashier')">Cashier</button>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </nav>
+    </header>
+
+    <main id="app" style="display: none;">
+        
+        <!-- واجهة المدير (Admin Module) -->
+        <section id="admin" class="module">
+            <div class="module-header">
+                <h2>Admin Dashboard</h2>
+                <p>Strategic Oversight & Resource Management</p>
+            </div>
+            
+            <div class="grid">
+                <!-- إنشاء حساب للموظف -->
+                <div class="card">
+                    <h3>Create Staff Account</h3>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="userFullName" placeholder="Enter full name">
+                    </div>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="userName" placeholder="System login username">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="userPass" placeholder="Assign a password">
+                    </div>
+                    <div class="form-group">
+                        <label>System Role</label>
+                        <select id="userRoleSelect"></select>
+                    </div>
+                    <button class="primary-btn" onclick="adminCreateUser()">Create Account</button>
+                </div>
+
+                <!-- التقارير المالية والإحصائيات -->
+                <div class="card">
+                    <h3>Analytical Reports</h3>
+                    <div class="report-stats">
+                        <p>Total Revenue: <strong id="totalSalesText">0.00 EGP</strong></p>
+                        <p>Total Invoices: <span id="invoiceCount" style="font-weight: bold;">0</span></p>
+                        <p>Total Staff: <span id="staffCount" style="font-weight: bold;">0</span></p>
+                    </div>
+                    <button class="toggle-btn" style="width: 100%; margin-top: 20px;" onclick="loadAdminReports()">Refresh Statistics</button>
+                </div>
+
+                <!-- جدول عرض الموظفين المسجلين -->
+                <div class="card full-width">
+                    <h3>Registered Staff Accounts</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Full Name</th>
+                                    <th>Role</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- واجهة الصيدلي (Pharmacist Module) -->
+        <section id="pharmacist" class="module">
+            <div class="module-header">
+                <h2>Inventory & Quality Control</h2>
+                <p>Technical management of medical stock and safety.</p>
+            </div>
+            <div class="grid">
+                <!-- إضافة وتحديث مخزون الأدوية -->
+                <div class="card">
+                    <h3>Add / Update Stock</h3>
+                    <div class="form-group">
+                        <label>Barcode / Code</label>
+                        <input type="text" id="medCode" placeholder="Scan or enter code">
+                    </div>
+                    <div class="form-group">
+                        <label>Medicine Name</label>
+                        <input type="text" id="medName" placeholder="e.g. Panadol Extra">
+                    </div>
+                    <div class="form-group" style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label>Price (EGP)</label>
+                            <input type="number" id="medPrice" placeholder="0.00" step="0.01">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Quantity</label>
+                            <input type="number" id="medQty" placeholder="0">
+                        </div>
+                    </div>
+                    <button class="primary-btn" onclick="pharmacistAddMedicine()">Update Database</button>
+                </div>
+
+                <!-- نظام التنبيهات ونواقص المخزون -->
+                <div class="card">
+                    <h3>Expiration & Stock Alerts</h3>
+                    <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 15px;">Scan database for low stock or critical items.</p>
+                    <button class="toggle-btn" style="width: 100%; margin-bottom: 15px;" onclick="runStockReport()">
+                        Run Stock Report
+                    </button>
+                    <ul id="expiryList" class="alert-list"></ul>
+                </div>
+
+                <!-- جدول جرد المخزون بالكامل -->
+                <div class="card full-width">
+                    <h3>Current Inventory Stock</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Medicine Name</th>
+                                    <th>Price</th>
+                                    <th>Quantity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- واجهة الكاشير ونقاط البيع (Cashier POS) -->
+        <section id="cashier" class="module">
+            <div class="module-header">
+                <h2>Sales Operations</h2>
+                <p>Real-time transaction processing.</p>
+            </div>
+            <div class="sales-container">
+                <!-- مربع البحث عن باركود الدواء وسلة المشتريات -->
+                <div class="card">
+                    <h3>New Transaction</h3>
+                    <div class="search-box">
+                        <input type="text" id="searchMedCode" placeholder="Scan Barcode or Code...">
+                        <button class="primary-btn" style="width: auto; padding: 10px 25px;" onclick="searchAndAddToCart()">Add</button>
+                    </div>
+                    <div class="table-container" style="margin-top: 20px;">
+                        <table class="small-table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Qty</th>
+                                    <th>Price</th>
+                                    <th>Total</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="cartItemsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- مربع حساب وإتمام الدفع -->
+                <div class="card">
+                    <h3>Order Summary</h3>
+                    <div class="total-box">
+                        <h4>Grand Total</h4>
+                        <h1 id="cartTotalText">0.00 EGP</h1>
+                    </div>
+                    <button class="success-btn" onclick="processPayment()">Process Payment</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ربط ملف البرمجة والمنطق الخارجي -->
+    <script src="script.js"></script>
+</body>
+</html>
