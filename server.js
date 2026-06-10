@@ -346,6 +346,6 @@ app.get('/health', (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 3306;
-app.listen(PORT, () => {
+app.listen(PORT, () => 3000
   console.log(`🚀 PharmaStream API Server running on port ${PORT}`);
 });
