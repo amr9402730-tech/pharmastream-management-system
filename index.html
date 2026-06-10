@@ -1,489 +1,291 @@
-let currentUser = null;
-let cart = [];
-let cartTotal = 0;
-let allInvoicesCache = []; // كاش محلي للفواتير لفلترتها ديناميكياً بدون استعلامات معقدة
-const API_BASE = 'http://localhost:3000/api';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PharmaStream | Management System</title>
+    <!-- ربط ملف التصميم الخارجي -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
 
-// ==========================================
-// 1. نظام تسجيل الدخول والتحقق
-// ==========================================
-async function handleLogin() {
-    const user = document.getElementById('loginUser').value.trim();
-    const pass = document.getElementById('loginPass').value.trim();
-    const errorMsg = document.getElementById('loginError');
-
-    if (!user || !pass) {
-        errorMsg.textContent = "Please enter both username and password.";
-        errorMsg.style.display = "block";
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: user, password: pass })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            currentUser = data.user;
-            document.getElementById('loginOverlay').style.display = 'none';
-            document.getElementById('mainHeader').style.display = 'flex';
-            document.getElementById('app').style.display = 'block';
+    <!-- بوابة تسجيل الدخول (Authentication) -->
+    <div id="loginOverlay" class="login-screen">
+        <div class="login-card">
+            <div class="logo">Pharma<span>Stream</span></div>
+            <h2>System Authentication</h2>
+            <p>Enter credentials to access your workflow.</p>
             
-            const role = currentUser.role_name.toLowerCase();
-            showModule(role);
-
-            if (role === 'admin') {
-                loadRolesDropdown();
-                loadUsersTable();
-                loadAdminReports();
-            } else if (role === 'pharmacist') {
-                loadInventoryTable();
-                runStockReport();
-            } else if (role === 'cashier') {
-                cart = [];
-                updateCartUI();
-            }
-        } else {
-            errorMsg.textContent = data.message || "Invalid credentials.";
-            errorMsg.style.display = "block";
-        }
-    } catch (error) {
-        errorMsg.textContent = "Server Connection Error. Ensure Backend is running.";
-        errorMsg.style.display = "block";
-    }
-}
-
-function logout() {
-    location.reload();
-}
-
-function showModule(moduleId) {
-    document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
-    document.querySelectorAll('nav button').forEach(b => b.style.display = 'none');
-    
-    const targetModule = document.getElementById(moduleId);
-    const targetBtn = document.getElementById(`btn-${moduleId}`);
-    
-    if(targetModule) targetModule.classList.add('active');
-    if(targetBtn) {
-        targetBtn.style.display = 'inline-block';
-        targetBtn.classList.add('active-nav');
-    }
-    document.querySelector('.logout-btn').style.display = 'inline-block';
-}
-
-// ==========================================
-// 2. إدارة المستخدمين (Admin)
-// ==========================================
-async function loadRolesDropdown() {
-    try {
-        const response = await fetch(`${API_BASE}/roles`);
-        const data = await response.json();
-        if (data.success) {
-            const select = document.getElementById('userRoleSelect');
-            select.innerHTML = '<option value="" disabled selected>Select Role</option>';
-            data.roles.forEach(role => {
-                select.innerHTML += `<option value="${role.role_id}">${role.role_name} (${role.description})</option>`;
-            });
-        }
-    } catch (err) { console.error("Error loading roles", err); }
-}
-
-async function loadUsersTable() {
-    try {
-        const response = await fetch(`${API_BASE}/users`);
-        const data = await response.json();
-        if (data.success) {
-            const tbody = document.getElementById('userTableBody');
-            tbody.innerHTML = '';
-            document.getElementById('staffCount').innerText = data.users.length;
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="loginUser" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="loginPass" placeholder="••••••••">
+            </div>
             
-            data.users.forEach(user => {
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${user.user_id}</td>
-                        <td><strong>${user.username}</strong></td>
-                        <td>${user.full_name}</td>
-                        <td><span class="status-pill status-Active">${user.role_name}</span></td>
-                    </tr>`;
-            });
-        }
-    } catch (err) { console.error("Error loading users", err); }
-}
+            <button class="primary-btn" onclick="handleLogin()">Login to System</button>
+            <p id="loginError" class="error-text"></p>
+        </div>
+    </div>
 
-async function adminCreateUser() {
-    const fullName = document.getElementById('userFullName').value.trim();
-    const username = document.getElementById('userName').value.trim();
-    const pass = document.getElementById('userPass').value.trim();
-    const roleId = document.getElementById('userRoleSelect').value;
+    <!-- شريط القائمة العلوي والتنقل بين الواجهات -->
+    <header id="mainHeader" style="display: none;">
+        <div class="logo">Pharma<span>Stream</span></div>
+        <nav id="navLinks">
+            <button id="btn-admin" onclick="showModule('admin')">Admin</button>
+            <button id="btn-pharmacist" onclick="showModule('pharmacist')">Pharmacist</button>
+            <button id="btn-cashier" onclick="showModule('cashier')">Cashier</button>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </nav>
+    </header>
 
-    if (!fullName || !username || !pass || !roleId) return alert("Please fill all fields");
-
-    try {
-        const response = await fetch(`${API_BASE}/users`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-user-role-id': currentUser.role_id 
-            },
-            body: JSON.stringify({ username: username, password: pass, full_name: fullName, role_id: parseInt(roleId) })
-        });
-        const data = await response.json();
-        alert(data.message);
+    <main id="app" style="display: none;">
         
-        if (data.success) {
-            document.getElementById('userFullName').value = '';
-            document.getElementById('userName').value = '';
-            document.getElementById('userPass').value = '';
-            document.getElementById('userRoleSelect').value = '';
-            loadUsersTable();
-        }
-    } catch (err) { alert("Server connection error."); }
-}
-
-// ==========================================
-// 3. تقارير المبيعات التفصيلية والذكية (Admin)
-// ==========================================
-async function loadAdminReports() {
-    try {
-        const response = await fetch(`${API_BASE}/reports`);
-        const data = await response.json();
-        if (data.success) {
-            allInvoicesCache = data.invoices;
-            renderAdminReports(allInvoicesCache);
-        }
-    } catch (err) { console.error("Error loading reports", err); }
-}
-
-function renderAdminReports(invoices) {
-    const tbody = document.getElementById('invoicesBody');
-    const tfoot = document.getElementById('invoicesFoot');
-    if(!tbody || !tfoot) return;
-
-    tbody.innerHTML = '';
-    tfoot.innerHTML = '';
-
-    let totalRev = 0;
-    document.getElementById('invoiceCount').innerText = invoices.length;
-
-    if (invoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No invoices found.</td></tr>';
-        document.getElementById('totalSalesText').innerText = `0.00 EGP`;
-        return;
-    }
-
-    invoices.forEach(inv => {
-        const price = parseFloat(inv.total_price);
-        totalRev += price;
-        const d = new Date(inv.created_at);
-        tbody.innerHTML += `
-            <tr>
-                <td><strong>${inv.invoice_number}</strong></td>
-                <td>👤 ${inv.cashier_name}</td>
-                <td>🕒 ${d.toLocaleDateString()} ${d.toLocaleTimeString()}</td>
-                <td style="color: var(--success); font-weight: bold;">${price.toFixed(2)} EGP</td>
-            </tr>
-        `;
-    });
-
-    document.getElementById('totalSalesText').innerText = `${totalRev.toFixed(2)} EGP`;
-
-    tfoot.innerHTML = `
-        <tr style="background-color: #f8f9fa; font-weight: bold; border-top: 2px solid var(--primary);">
-            <td colspan="3" style="text-align: right; padding: 12px;">Grand Total:</td>
-            <td style="color: var(--danger); font-size: 1.1rem; padding: 12px;">${totalRev.toFixed(2)} EGP</td>
-        </tr>
-    `;
-}
-
-function filterAdminReportsByDate() {
-    const selectedDate = document.getElementById('adminReportDate').value;
-    if (!selectedDate) return alert("Please select a date first.");
-    
-    // فلترة الكاش المحلي ديناميكياً بالتاريخ المحدد لضمان السرعة والامتثال للقواعد
-    const filtered = allInvoicesCache.filter(inv => {
-        const invDate = new Date(inv.created_at).toISOString().split('T')[0];
-        return invDate === selectedDate;
-    });
-    renderAdminReports(filtered);
-}
-
-// ==========================================
-// 4. تكويد الأدوية وتعديلها (Admin)
-// ==========================================
-function toggleAdminMedForm() {
-    const action = document.getElementById('adminMedAction').value;
-    const searchGroup = document.getElementById('adminMedSearchGroup');
-    const submitBtn = document.getElementById('adminMedSubmitBtn');
-    const codeInput = document.getElementById('adminMedCode');
-
-    if (action === 'edit') {
-        searchGroup.style.display = 'block';
-        submitBtn.innerText = 'Update Medicine (تعديل الدواء)';
-        codeInput.disabled = true; // الباركود أساسي ولا يمكن تعديله لعدم تلف العلاقات
-    } else {
-        searchGroup.style.display = 'none';
-        submitBtn.innerText = 'Save Medicine (حفظ الدواء الجديد)';
-        codeInput.disabled = false;
-        clearAdminMedForm();
-    }
-}
-
-function clearAdminMedForm() {
-    document.getElementById('adminSearchCode').value = '';
-    document.getElementById('adminMedCode').value = '';
-    document.getElementById('adminMedName').value = '';
-    document.getElementById('adminMedPrice').value = '';
-    document.getElementById('adminMedQty').value = '';
-    document.getElementById('adminMedMinQty').value = '10';
-    document.getElementById('adminMedExpiry').value = '';
-}
-
-async function adminSearchMedicineToEdit() {
-    const code = document.getElementById('adminSearchCode').value.trim();
-    if(!code) return alert("Please enter a barcode to fetch.");
-
-    try {
-        const response = await fetch(`${API_BASE}/medicines`);
-        const data = await response.json();
-        const list = data.success ? data.medicines : data;
-
-        const med = list.find(m => m.code === code);
-        if (med) {
-            document.getElementById('adminMedCode').value = med.code;
-            document.getElementById('adminMedName').value = med.name;
-            document.getElementById('adminMedPrice').value = med.price;
-            document.getElementById('adminMedQty').value = med.qty;
-            document.getElementById('adminMedMinQty').value = med.min_qty || 10;
-            if(med.expiry_date) {
-                document.getElementById('adminMedExpiry').value = new Date(med.expiry_date).toISOString().split('T')[0];
-            }
-        } else {
-            alert("Medicine not found in database.");
-        }
-    } catch (err) {
-        alert("Error fetching medicine details.");
-    }
-}
-
-async function adminSubmitMedicine() {
-    const action = document.getElementById('adminMedAction').value;
-    const code = document.getElementById('adminMedCode').value.trim();
-    const name = document.getElementById('adminMedName').value.trim();
-    const price = parseFloat(document.getElementById('adminMedPrice').value);
-    const qty = parseInt(document.getElementById('adminMedQty').value);
-    const minQty = parseInt(document.getElementById('adminMedMinQty').value) || 10;
-    const expiry = document.getElementById('adminMedExpiry').value;
-
-    if (!code || !name || isNaN(price) || isNaN(qty)) {
-        return alert("Please fill all fields correctly.");
-    }
-
-    try {
-        if (action === 'add') {
-            const response = await fetch(`${API_BASE}/medicines`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-user-role-id': currentUser.role_id 
-                },
-                body: JSON.stringify({ code, name, price, qty, min_qty: minQty, expiry_date: expiry })
-            });
-            const data = await response.json();
-            alert(data.message);
-            if (data.success) clearAdminMedForm();
-        } else {
-            // تحديث كامل لبيانات الدواء (سعر، كمية، اسم، تاريخ صلاحية)
-            const response = await fetch(`${API_BASE}/medicines`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'x-user-role-id': currentUser.role_id 
-                },
-                body: JSON.stringify({ 
-                    code: code, 
-                    name: name,
-                    price: price,
-                    new_qty: qty, 
-                    min_qty: minQty,
-                    expiry_date: expiry
-                })
-            });
-            const data = await response.json();
-            alert(data.message || "Medicine updated successfully!");
-            if (data.success) clearAdminMedForm();
-        }
-    } catch (err) {
-        alert("Error submitting medicine information.");
-    }
-}
-
-// ==========================================
-// 5. إدارة الصيدلي (Pharmacist Control)
-// ==========================================
-async function pharmacistAddMedicine() {
-    const code = document.getElementById('medCode').value.trim();
-    const name = document.getElementById('medName').value.trim();
-    const price = document.getElementById('medPrice').value;
-    const qty = document.getElementById('medQty').value;
-
-    if (!code || !name || !price || !qty) return alert("Please fill all medicine fields.");
-
-    try {
-        const response = await fetch(`${API_BASE}/medicines`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-user-role-id': currentUser.role_id 
-            },
-            body: JSON.stringify({ code: code, name: name, price: parseFloat(price), qty: parseInt(qty) })
-        });
-        const data = await response.json();
-        alert(data.message);
-        
-        if (data.success) {
-            document.getElementById('medCode').value = '';
-            document.getElementById('medName').value = '';
-            document.getElementById('medPrice').value = '';
-            document.getElementById('medQty').value = '';
-            loadInventoryTable();
-            runStockReport();
-        }
-    } catch (err) { alert("Server connection error."); }
-}
-
-async function loadInventoryTable() {
-    try {
-        const response = await fetch(`${API_BASE}/medicines`);
-        const data = await response.json();
-        
-        const list = data.success ? data.medicines : data; 
-        const tbody = document.getElementById('inventoryTableBody');
-        tbody.innerHTML = '';
-        
-        if(list && list.length > 0) {
-            list.forEach(med => {
-                const stockStyle = med.qty <= med.min_qty ? 'color: var(--danger); font-weight: bold;' : 'color: var(--success);';
-                tbody.innerHTML += `
-                    <tr>
-                        <td>${med.code}</td>
-                        <td><strong>${med.name}</strong></td>
-                        <td>${med.price} EGP</td>
-                        <td style="${stockStyle}">${med.qty} Units</td>
-                    </tr>`;
-            });
-        }
-    } catch (err) { console.error("Error loading inventory", err); }
-}
-
-async function runStockReport() {
-    try {
-        const response = await fetch(`${API_BASE}/medicines`);
-        const data = await response.json();
-        const list = data.success ? data.medicines : data;
-        
-        const reportList = document.getElementById('expiryList');
-        reportList.innerHTML = '';
-        
-        let alertsFound = false;
-
-        list.forEach(med => {
-            if(med.qty <= 0) {
-                reportList.innerHTML += `<li class="alert-item"><span><strong>${med.name}</strong> (Code: ${med.code})</span><span style="color:var(--danger)">OUT OF STOCK</span></li>`;
-                alertsFound = true;
-            } else if (med.qty <= med.min_qty) {
-                reportList.innerHTML += `<li class="alert-item alert-warning"><span><strong>${med.name}</strong> (Code: ${med.code})</span><span style="color:#d35400">LOW STOCK (${med.qty})</span></li>`;
-                alertsFound = true;
-            }
-        });
-
-        if(!alertsFound) {
-            reportList.innerHTML = '<li style="color:var(--success); padding: 10px;">All stock levels are optimal.</li>';
-        }
-    } catch (err) { console.error("Error running report", err); }
-}
-
-// ==========================================
-// 6. مبيعات الكاشير وسلة التسوق (Cashier POS)
-// ==========================================
-async function searchAndAddToCart() {
-    const code = document.getElementById('searchMedCode').value.trim();
-    if(!code) return alert("Please enter a barcode.");
-
-    try {
-        const response = await fetch(`${API_BASE}/medicines`);
-        const medicines = await response.json();
-        const list = medicines.success ? medicines.medicines : medicines;
-        
-        const med = list.find(m => m.code === code);
-        
-        if(med) {
-            if(med.qty <= 0) return alert("Item is Out of Stock!");
+        <!-- واجهة المدير (Admin Module) -->
+        <section id="admin" class="module">
+            <div class="module-header">
+                <h2>Admin Dashboard</h2>
+                <p>Strategic Oversight & Resource Management</p>
+            </div>
             
-            const existing = cart.find(item => item.code === med.code);
-            if(existing) {
-                if(existing.qty + 1 > med.qty) return alert("Not enough stock available.");
-                existing.qty += 1;
-            } else {
-                cart.push({ code: med.code, name: med.name, price: med.price, qty: 1 });
-            }
-            
-            updateCartUI();
-            document.getElementById('searchMedCode').value = '';
-            document.getElementById('searchMedCode').focus();
-        } else {
-            alert("Medicine not found!");
-        }
-    } catch (err) { alert("Error connecting to server."); }
-}
+            <div class="grid">
+                <!-- إنشاء حساب للموظف -->
+                <div class="card">
+                    <h3>Create Staff Account</h3>
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" id="userFullName" placeholder="Enter full name">
+                    </div>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="userName" placeholder="System login username">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="userPass" placeholder="Assign a password">
+                    </div>
+                    <div class="form-group">
+                        <label>System Role</label>
+                        <select id="userRoleSelect"></select>
+                    </div>
+                    <button class="primary-btn" onclick="adminCreateUser()">Create Account</button>
+                </div>
 
-function updateCartUI() {
-    const tbody = document.getElementById('cartItemsBody');
-    tbody.innerHTML = '';
-    cartTotal = 0;
+                <!-- التقارير المالية والإحصائيات -->
+                <div class="card">
+                    <h3>Analytical Reports</h3>
+                    <div class="report-stats">
+                        <p>Total Revenue: <strong id="totalSalesText">0.00 EGP</strong></p>
+                        <p>Total Invoices: <span id="invoiceCount" style="font-weight: bold;">0</span></p>
+                        <p>Total Staff: <span id="staffCount" style="font-weight: bold;">0</span></p>
+                    </div>
+                    <button class="toggle-btn" style="width: 100%; margin-top: 20px;" onclick="loadAdminReports()">Refresh Statistics</button>
+                </div>
 
-    cart.forEach((item, index) => {
-        const lineTotal = item.price * item.qty;
-        cartTotal += lineTotal;
-        tbody.innerHTML += `
-            <tr>
-                <td><strong>${item.name}</strong><br><small>${item.code}</small></td>
-                <td>
-                    <button class="toggle-btn" style="padding: 2px 6px;" onclick="changeQty(${index}, -1)">-</button>
-                    ${item.qty}
-                    <button class="toggle-btn" style="padding: 2px 6px;" onclick="changeQty(${index}, 1)">+</button>
-                </td>
-                <td>${item.price} EGP</td>
-                <td><strong>${lineTotal.toFixed(2)} EGP</strong></td>
-                <td><button class="remove-btn" onclick="removeItem(${index})">X</button></td>
-            </tr>
-        `;
-    });
+                <!-- إدارة الأدوية وتكويدها / تعديلها (خاص بالمدير) -->
+                <div class="card">
+                    <h3>Medicine Coding & Editing</h3>
+                    <div class="form-group">
+                        <label>Select Action</label>
+                        <select id="adminMedAction" onchange="toggleAdminMedForm()">
+                            <option value="add">Add New Medicine (تكويد دواء جديد)</option>
+                            <option value="edit">Edit Existing Medicine (تعديل دواء حالي)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- حقل البحث في حالة التعديل -->
+                    <div id="adminMedSearchGroup" style="display: none;" class="form-group">
+                        <label>Search Medicine by Barcode</label>
+                        <div class="search-box" style="display: flex; gap: 10px;">
+                            <input type="text" id="adminSearchCode" placeholder="Enter Barcode...">
+                            <button class="primary-btn" style="width: auto; padding: 10px 20px;" onclick="adminSearchMedicineToEdit()">Fetch</button>
+                        </div>
+                    </div>
 
-    document.getElementById('cartTotalText').innerText = `${cartTotal.toFixed(2)} EGP`;
-}
+                    <div class="form-group">
+                        <label>Medicine Code (Barcode)</label>
+                        <input type="text" id="adminMedCode" placeholder="e.g. 101">
+                    </div>
+                    <div class="form-group">
+                        <label>Medicine Name</label>
+                        <input type="text" id="adminMedName" placeholder="e.g. Panadol Extra">
+                    </div>
+                    <div class="form-group" style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label>Price (EGP)</label>
+                            <input type="number" id="adminMedPrice" placeholder="0.00" step="0.01">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Stock Quantity</label>
+                            <input type="number" id="adminMedQty" placeholder="0">
+                        </div>
+                    </div>
+                    <div class="form-group" style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label>Min Qty (Limit)</label>
+                            <input type="number" id="adminMedMinQty" value="10" placeholder="10">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Expiry Date</label>
+                            <input type="date" id="adminMedExpiry">
+                        </div>
+                    </div>
+                    <button class="primary-btn" id="adminMedSubmitBtn" onclick="adminSubmitMedicine()">Save Medicine</button>
+                </div>
 
-function changeQty(index, amount) {
-    if(cart[index].qty + amount > 0) {
-        cart[index].qty += amount;
-        updateCartUI();
-    }
-}
+                <!-- جدول عرض الموظفين المسجلين -->
+                <div class="card full-width">
+                    <h3>Registered Staff Accounts</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Username</th>
+                                    <th>Full Name</th>
+                                    <th>Role</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
 
-function removeItem(index) {
-    cart.splice(index, 1);
-    updateCartUI();
-}
+                <!-- جدول عرض تقارير المبيعات التفصيلية (خاص بالمدير) -->
+                <div class="card full-width">
+                    <h3>Detailed Sales Reports</h3>
+                    <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;">
+                        <div class="form-group" style="margin: 0; flex: 1; min-width: 150px;">
+                            <label>Filter by Date</label>
+                            <input type="date" id="adminReportDate">
+                        </div>
+                        <button class="toggle-btn" onclick="filterAdminReportsByDate()">Filter Reports</button>
+                        <button class="toggle-btn" onclick="loadAdminReports()">Show All</button>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Invoice #</th>
+                                    <th>Cashier Name</th>
+                                    <th>Date & Time</th>
+                                    <th>Total Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="invoicesBody"></tbody>
+                            <tfoot id="invoicesFoot"></tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
 
-async function processPayment() {
-    if(cart.length === 0) return alert("Cart is empty.");
-    
-    alert(`Payment Successful!\nTotal Deducted: ${cartTotal.toFixed(2)} EGP\nPrinting Receipt...`);
-    
-    cart = [];
-    updateCartUI();
-}
+        <!-- واجهة الصيدلي (Pharmacist Module) -->
+        <section id="pharmacist" class="module">
+            <div class="module-header">
+                <h2>Inventory & Quality Control</h2>
+                <p>Technical management of medical stock and safety.</p>
+            </div>
+            <div class="grid">
+                <!-- إضافة وتحديث مخزون الأدوية -->
+                <div class="card">
+                    <h3>Add / Update Stock</h3>
+                    <div class="form-group">
+                        <label>Barcode / Code</label>
+                        <input type="text" id="medCode" placeholder="Scan or enter code">
+                    </div>
+                    <div class="form-group">
+                        <label>Medicine Name</label>
+                        <input type="text" id="medName" placeholder="e.g. Panadol Extra">
+                    </div>
+                    <div class="form-group" style="display: flex; gap: 10px;">
+                        <div style="flex: 1;">
+                            <label>Price (EGP)</label>
+                            <input type="number" id="medPrice" placeholder="0.00" step="0.01">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Quantity</label>
+                            <input type="number" id="medQty" placeholder="0">
+                        </div>
+                    </div>
+                    <button class="primary-btn" onclick="pharmacistAddMedicine()">Update Database</button>
+                </div>
+
+                <!-- نظام التنبيهات ونواقص المخزون -->
+                <div class="card">
+                    <h3>Expiration & Stock Alerts</h3>
+                    <p style="font-size: 0.85rem; color: var(--gray); margin-bottom: 15px;">Scan database for low stock or critical items.</p>
+                    <button class="toggle-btn" style="width: 100%; margin-bottom: 15px;" onclick="runStockReport()">
+                        Run Stock Report
+                    </button>
+                    <ul id="expiryList" class="alert-list"></ul>
+                </div>
+
+                <!-- جدول جرد المخزون بالكامل -->
+                <div class="card full-width">
+                    <h3>Current Inventory Stock</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Medicine Name</th>
+                                    <th>Price</th>
+                                    <th>Quantity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- واجهة الكاشير ونقاط البيع (Cashier POS) -->
+        <section id="cashier" class="module">
+            <div class="module-header">
+                <h2>Sales Operations</h2>
+                <p>Real-time transaction processing.</p>
+            </div>
+            <div class="sales-container">
+                <!-- مربع البحث عن باركود الدواء وسلة المشتريات -->
+                <div class="card">
+                    <h3>New Transaction</h3>
+                    <div class="search-box">
+                        <input type="text" id="searchMedCode" placeholder="Scan Barcode or Code...">
+                        <button class="primary-btn" style="width: auto; padding: 10px 25px;" onclick="searchAndAddToCart()">Add</button>
+                    </div>
+                    <div class="table-container" style="margin-top: 20px;">
+                        <table class="small-table">
+                            <thead>
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Qty</th>
+                                    <th>Price</th>
+                                    <th>Total</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="cartItemsBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- مربع حساب وإتمام الدفع -->
+                <div class="card">
+                    <h3>Order Summary</h3>
+                    <div class="total-box">
+                        <h4>Grand Total</h4>
+                        <h1 id="cartTotalText">0.00 EGP</h1>
+                    </div>
+                    <button class="success-btn" onclick="processPayment()">Process Payment</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ربط ملف البرمجة والمنطق الخارجي -->
+    <script src="script.js"></script>
+</body>
+</html>
